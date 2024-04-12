@@ -52,7 +52,7 @@ class Trip(models.Model):
     )
     trip_state = models.PositiveSmallIntegerField(choices=STATE_CHOICES)
     ECOLEVEL_CHOICES = (
-        (0, 'Level 0'),
+        (0, 'Level 0'), # 의미있나?
         (1, 'Level 1'),
         (2, 'Level 2'),
         (3, 'Level 3'),
