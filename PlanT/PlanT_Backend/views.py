@@ -132,7 +132,7 @@ def Sender(request):
         return JsonResponse({'error': 'Only GET requests are allowed'}, status=405)       
 
     
-def TripMaker1(request):    
+def TripMaker(request):    
     
     if request.method == 'POST':
         
@@ -157,28 +157,23 @@ def TripMaker1(request):
         plan_count = (end_date - start_date).days 
         plc_count = plan_count * 2 # 고를 수 있는 장소 수
     
-        stay_city = from_city
-        plan_list = []
         
         for i in range(plan_count + 1):
                
             if current_date > move_date:
                 stay_city = to_city
-                move_plan = 1
-                if new_plan:
-                    move_plan = new_plan.plan_id
-                plc_count -= 2
-                move_plan_index = i+1
+            
+            new_plan_id = Plan.objects.filter(plan_trip = new_trip_id).values_list('plan_id',flat=True).order_by('-plan_id')[0] + 1
                 
-            new_plan = Plan(plan_date = current_date,
-                            plan_trip = new_trip.trip_id,
+            new_plan = Plan(plan_id = new_plan_id,
+                            plan_date = current_date,
+                            plan_trip = new_trip_id,
                             plan_city = stay_city)
             
             new_plan.save()
             plan_list.append(new_plan.plan_id)
             current_date += timedelta(days=1)
-        
-        plan_list.remove(move_plan)
+            new_plan_id += 1
         
         return JsonResponse({'message': 'New trip is created with plans',
                              'move_plan': move_plan,
@@ -351,7 +346,11 @@ def Planner(request):
                                 2 : coordinated_plc_poss_eco, # 목적지 후보들 좌표(x,y) 리스트
                                 3 : plc_poss_eco} # 목적지 후보들 id(위 좌표 리스트와 순서쌍)
                     
-                    eco_route_info = GetPlace(input_eco)
+                    eco_route_info = route(input_eco)
+                    
+                    last_route_id = Route.objects.values_list('route_id',flat=True).order_by('-route_id')[0]
+                    new_route_id_eco = last_route_id + 1
+                    
                     last_plan_route = Route.objects.filter(route_plan=plan_dict[i][0]).values_list('route_id',flat=True)
                     
                     if last_plan_route:
@@ -378,7 +377,7 @@ def Planner(request):
                     new_route_eco.save()
                     
                 # 보내서 최단거리 장소(id),이동수단,소요시간,탄소배출량 받기
-                route_info = GetPlace(input)
+                route_info = route(input)
                 plc_id = 11
                 plc_move = 3
                 plc_time = 30
@@ -412,7 +411,11 @@ def Planner(request):
                 
             else: # 장소 -> 장소(지정경로)  
                 
-                confirmed_route_info = APIRoute(Coordinate(plan_dict[i][1][j-1]), Coordinate(plan_dict[i][1][j]))  
+                confirmed_route_info = api_route(plan_dict[i][1][j-1], plan_dict[i][1][j])  
+                
+                last_route_id = Route.objects.values_list('route_id',flat=True).order_by('-route_id')[0]
+                new_confirmed_route_id = last_route_id + 1
+                    
                 last_plan_route = Route.objects.filter(route_plan=plan_dict[i][0]).values_list('route_id',flat=True)
                     
                 if last_plan_route:
@@ -425,8 +428,9 @@ def Planner(request):
                 end_time = start_time + timedelta(minutes=confirmed_route_info[2])
                 
                 # 루트 플랜에 저장하기
-                new_confirmed_route = Route(route_type = 3,
-                                            route_transport = confirmed_route_info[0],
+                new_confirmed_route = Route(route_id = new_confirmed_route_id,
+                                            route_type = 3,
+                                            route_transport = confirmed_route_info[1],
                                             route_starttime = start_time,
                                             route_endtime = end_time,
                                             route_time = confirmed_route_info[1],
