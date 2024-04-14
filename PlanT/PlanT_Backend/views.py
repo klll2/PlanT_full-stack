@@ -137,15 +137,13 @@ def TripMaker1(request):
     if request.method == 'POST':
         
         data = json.loads(request.body.decode('utf-8'))  # JSON 데이터를 파이썬 객체로 변환
-        new_trip_id = Trip.objects.values_list('trip_id',flat=True).order_by('-trip_id')[0] + 1
         start_date = data.get('start_date')
         end_date = data.get('end_date')
         move_date = data.get('move_date')
         from_city = data.get('from_city')
         to_city = data.get('to_city')
         
-        new_trip = Trip(trip_id = new_trip_id, 
-                        trip_start = start_date, 
+        new_trip = Trip(trip_start = start_date, 
                         trip_end = end_date,
                         trip_state = 1,
                         trip_ecolevel = data.get('poss_time'),
@@ -159,34 +157,33 @@ def TripMaker1(request):
         plan_count = (end_date - start_date).days 
         plc_count = plan_count * 2 # 고를 수 있는 장소 수
     
+        stay_city = from_city
+        plan_list = []
         
         for i in range(plan_count + 1):
-            
-            
-            if current_date < move_date:
-                stay_city = from_city
-                
-            elif current_date == move_date:
-                stay_city = from_city
-                move_plan = new_plan_id
-                
-            else:
+               
+            if current_date > move_date:
                 stay_city = to_city
-            
-            new_plan_id = Plan.objects.filter(plan_trip = new_trip_id).values_list('plan_id',flat=True).order_by('-plan_id')[0] + 1
+                move_plan = 1
+                if new_plan:
+                    move_plan = new_plan.plan_id
+                plc_count -= 2
+                move_plan_index = i+1
                 
-            new_plan = Plan(plan_id = new_plan_id,
-                            plan_date = current_date,
-                            plan_trip = new_trip_id,
+            new_plan = Plan(plan_date = current_date,
+                            plan_trip = new_trip.trip_id,
                             plan_city = stay_city)
             
             new_plan.save()
-                
+            plan_list.append(new_plan.plan_id)
             current_date += timedelta(days=1)
-            new_plan_id += 1
+        
+        plan_list.remove(move_plan)
         
         return JsonResponse({'message': 'New trip is created with plans',
                              'move_plan': move_plan,
+                             'move_plan_index' : move_plan_index,
+                             'plan_list' : plan_list,
                              'plc_count' : plc_count},
                             safe=False)
         
@@ -202,18 +199,10 @@ def RouteMaker(request):
         start_plc = data.get('start_plc')
         end_plc = data.get('end_plc')
         move_plan = data.get('move_plan')
+        
         origin_date = Plan.objects.get(pk=move_plan).plan_date
-        
-        last_route = Route.objects.values_list('route_id',flat=True)
-        
-        if last_route:
-            last_route_id = last_route.order_by('-route_id')[0] + 1
-        
-        else:
-            last_route_id = 1
-        
-        new_route = Route(route_id = last_route_id,
-                          route_type = 3,
+
+        new_route = Route(route_type = 3,
                           route_transport = 3,
                           route_starttime = origin_date.replace(hour=8, minute=0, second=0, microsecond=0),
                           route_endtime = origin_date.replace(hour=23, minute=0, second=0, microsecond=0),
@@ -318,10 +307,10 @@ def Planner(request):
         data = json.loads(request.body.decode('utf-8'))
         plan_dict = data.get('plan_dict')
         tag_dict = data.get('tag_dict')
-        eco_lev = int(data.get('eco_lev'))
+        eco_lev = Plan.objects.get(pk=plan_dict[1][0]).plan_trip.trip_ecolevel
         tag_dict = AssignTag(eco_lev, tag_dict)
     
-        i, j = 1
+        i, j = 1, 0
         
         while i <= len(plan_dict) and j < len(plan_dict[i][1]):
             
@@ -362,11 +351,7 @@ def Planner(request):
                                 2 : coordinated_plc_poss_eco, # 목적지 후보들 좌표(x,y) 리스트
                                 3 : plc_poss_eco} # 목적지 후보들 id(위 좌표 리스트와 순서쌍)
                     
-                    eco_route_info = route(input_eco)
-                    
-                    last_route_id = Route.objects.values_list('route_id',flat=True).order_by('-route_id')[0]
-                    new_route_id_eco = last_route_id + 1
-                    
+                    eco_route_info = GetPlace(input_eco)
                     last_plan_route = Route.objects.filter(route_plan=plan_dict[i][0]).values_list('route_id',flat=True)
                     
                     if last_plan_route:
@@ -379,8 +364,7 @@ def Planner(request):
                     end_time = start_time + timedelta(minutes=eco_route_info[2])
                 
                 # 루트 플랜에 저장하기
-                    new_route_eco = Route(route_id = new_route_id_eco,
-                                          route_type = 1,
+                    new_route_eco = Route(route_type = 1,
                                           route_transport = eco_route_info[1],
                                           route_starttime = start_time,
                                           route_endtime = end_time,
@@ -394,14 +378,11 @@ def Planner(request):
                     new_route_eco.save()
                     
                 # 보내서 최단거리 장소(id),이동수단,소요시간,탄소배출량 받기
-                route_info = route(input)
+                route_info = GetPlace(input)
                 plc_id = 11
                 plc_move = 3
                 plc_time = 30
                 plc_co2 = 30 # 정해지면 지우기
-                
-                last_route_id = Route.objects.values_list('route_id',flat=True).order_by('-route_id')[0]
-                new_route_id = last_route_id + 1
                 
                 # 루트 플랜에 저장하기
                 last_plan_route = Route.objects.filter(route_plan=plan_dict[i][0]).values_list('route_id',flat=True)
@@ -416,8 +397,7 @@ def Planner(request):
                 end_time = start_time + timedelta(minutes=route_info[2])
                 
                 # 루트 플랜에 저장하기
-                new_route = Route(route_id = new_route_id_eco,
-                                  route_type = 2,
+                new_route = Route(route_type = 2,
                                   route_transport = route_info[1],
                                   route_starttime = start_time,
                                   route_endtime = end_time,
@@ -432,11 +412,7 @@ def Planner(request):
                 
             else: # 장소 -> 장소(지정경로)  
                 
-                confirmed_route_info = api_route(plan_dict[i][1][j-1], plan_dict[i][1][j])  
-                
-                last_route_id = Route.objects.values_list('route_id',flat=True).order_by('-route_id')[0]
-                new_confirmed_route_id = last_route_id + 1
-                    
+                confirmed_route_info = APIRoute(Coordinate(plan_dict[i][1][j-1]), Coordinate(plan_dict[i][1][j]))  
                 last_plan_route = Route.objects.filter(route_plan=plan_dict[i][0]).values_list('route_id',flat=True)
                     
                 if last_plan_route:
@@ -449,16 +425,15 @@ def Planner(request):
                 end_time = start_time + timedelta(minutes=confirmed_route_info[2])
                 
                 # 루트 플랜에 저장하기
-                new_confirmed_route = Route(route_id = new_confirmed_route_id,
-                                            route_type = 3,
-                                            route_transport = confirmed_route_info[1],
+                new_confirmed_route = Route(route_type = 3,
+                                            route_transport = confirmed_route_info[0],
                                             route_starttime = start_time,
                                             route_endtime = end_time,
-                                            route_time = confirmed_route_info[2],
-                                            route_co2 = confirmed_route_info[3],
+                                            route_time = confirmed_route_info[1],
+                                            route_co2 = confirmed_route_info[2],
                                             route_detail = None,
-                                            route_start = plan_dict[i][1][j],
-                                            route_end = confirmed_route_info[0],
+                                            route_start = plan_dict[i][1][j-1],
+                                            route_end = plan_dict[i][1][j],
                                             route_plan = plan_dict[i][0])
             
                 new_confirmed_route.save()    

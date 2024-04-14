@@ -42,7 +42,7 @@ class Users(models.Model):
 
 
 class Trip(models.Model):
-    trip_id = models.PositiveIntegerField(primary_key=True)
+    trip_id = models.AutoField(primary_key=True)
     trip_start = models.DateField()
     trip_end = models.DateField()
     STATE_CHOICES = (
@@ -65,14 +65,14 @@ class Trip(models.Model):
 
 
 class Plan(models.Model):
-    plan_id = models.PositiveIntegerField(primary_key=True)
+    plan_id = models.AutoField(primary_key=True)
     plan_date = models.DateField()
     plan_trip = models.ForeignKey(Trip, on_delete=models.CASCADE)
     plan_city = models.ForeignKey(City, on_delete=models.CASCADE)
 
 
 class Route(models.Model):
-    route_id = models.PositiveIntegerField(primary_key=True)
+    route_id = models.AutoField(primary_key=True)
     TYPE_CHOICES = (
         (1, '친환경 경로'),
         (2, '최단 경로'),
